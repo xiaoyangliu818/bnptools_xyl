@@ -14,7 +14,7 @@ from scanList import scanList
 from misc import checkEntryDigit
 #from bnpScan import bnpScan, 
 from pvComm import pvComm, pvCommsubclass
-from scanBNP import xrfSetup, scanStart, scanFinish, getCoordinate_2, getMotorList#, getCoordinate_2
+from scanBNP import xrfSetup, scanStart, scanFinish, getCoordinate_2, getMotorList, xanes_ps_c, xanes_ps_n, xrfSetup_fromxanes#, getCoordinate_2
 from logger import stdoutToTextbox
 import time, datetime
 import pandas as pd
@@ -37,8 +37,9 @@ class scanFrame():
             self.scanclick = True
     
     def scanSetup(self):
-        self.record, self.recordval = self.slist.searchQueue()  #values for the first in queue and change it to 'scanning'
-    #recordval is the parameters for the first scan
+        #xyl: add a flog to determine whether the next one is the same or not 
+        self.flag, self.record, self.recordval = self.slist.searchQueue()  #values for the first in queue and change it to 'scanning'
+    #recordval is the parameters for the first scan  # a function from scanList
         if self.record is not None:
             self.pause_btn['state'] = tk.NORMAL
             self.slist.pbarInit()
@@ -55,14 +56,30 @@ class scanFrame():
             if self.stype =='Coarse':
                 self.coarse_scnum = self.recordval[0]
             
-            if self.stype == 'Fine':
-                time.sleep(1)  #give 1 min sleep before start 'Fine' scan
-                print('wait 1 min before Fine scan for getting .h5 file')
+            elif self.stype == 'Fine':
+                time.sleep(5)  #give 1 min sleep before start 'Fine' scan
+                print('wait 5s before Fine scan for getting .h5 file')
                 self.cur_ang = round(PV.caget('9idbTAU:SM:ST:ActPos'))  #just get int
                 self.angle_list.append(self.cur_ang)
                 print('current angle: {self.cur_ang} before check fine scan coordinates')
                 self.checkFineScanCoord()
-            else:
+            #----------------xyl: add scan setup for xanes-----------
+            elif self.stype == 'XANES (fixed region)' and self.flag == 2:  # means this one is xanes, previous one is xrf, needs to change to step mode
+                self.coordsReady = True
+                self.motors = xanes_ps_n(self.pvComm,self.scandic)   # change mono to auto, drive 1 to mono, read 1 to NA, center, width, step, dwell
+                self.monitormsg.set('wait for motors to be ready')
+                
+            elif self.stpye == 'XANES (fixed region)' and self.flag == 0: # this one and previous one are xanes, continue step mode
+                self.coordsReady = True
+                self.motors = xanes_ps_c(self.pvComm,self.scandic)   # only change center, width, step, dwell
+                self.monitormsg.set('wait for motors to be ready')
+                
+            elif self.stype == 'XRF' and self.flag == 1:  #this one is xrf, previous one is xanes, needs to change to fly mode
+                self.coordsReady = True
+                self.motors = xrfSetup_fromxanes(self.pvComm,self.scandic)
+                self.monitormsg.set('wait for motors to be ready')
+                
+            else:  # for continuous xrf
                 self.coordsReady = True
                 self.motors = xrfSetup(self.pvComm, self.scdic) # return a list of tuples
                 self.monitormsg.set('wait for motors to be ready')
@@ -131,10 +148,9 @@ class scanFrame():
         print(self.x_scan_list)
         self.df = pd.DataFrame(list(zip(self.angle_list,self.x_scan_list,self.y_scan_list)),columns=['Angle','X_pos','Y_pos'])
         #self.df.to_csv('/mnt/micdata1/bnp/2023-1/test_gui_xyl/fine_x_y_coordinates.csv')
-        self.df.to_csv(f'{self.user_folder}/fine_x_y_coordinates.csv')
-
-            
+        self.df.to_csv(f'{self.user_folder}/fine_x_y_coordinates.csv')           
 #------------------------xyl-------------------------------------------------------------
+
     def checkMotorReady(self):
         # Add timeout parameters
         if len(self.motors) > 0:
@@ -515,8 +531,8 @@ class scanFrame():
         self.detCheck_entry['state'] = tk.DISABLED
 
      
-        self.scmsg = tk.Text(self.scanfrm, wrap = 'word', height = 15, width = 139)
-        self.scmsg.grid(row = 24, column = 1, sticky = 'w', columnspan = 5, 
+        self.scmsg = tk.Text(self.scanfrm, wrap = 'word', height = 15, width = 150)
+        self.scmsg.grid(row = 24, column = 1, sticky = 'w', columnspan = 10, 
                         rowspan = 8, padx=(20,0), pady=(5,0))
         stdoutToTextbox(self.scmsg)
         

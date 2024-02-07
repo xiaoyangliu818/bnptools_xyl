@@ -138,7 +138,7 @@ if __name__ == "__main__":
     #root.wait_window(user_info_window)
     gui = MainWindow(root)
     #gui.show_user_info()
-    root.geometry('1260x780')
-    root.resizable(False, False)
+    root.geometry('1550x780')
+    root.resizable(True, True)
     root.mainloop()
 

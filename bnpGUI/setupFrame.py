@@ -382,6 +382,7 @@ class setupFrame:
             except (AttributeError, ValueError):
                 pass
             self.updateXYcenter()
+        
         elif (event.button == 3) & (self.insertType.get() == "ScanBox"):
             self.Rectangle_Drawing = True
             try:
@@ -391,10 +392,9 @@ class setupFrame:
             self.Canvas2D.mpl_disconnect(self.Canvas2D_Button_Press_Event)
             self.Canvas2D_Button_Release_Event = self.Canvas2D.mpl_connect(
                 "button_release_event", self.Canvas2D_Button_Released
-            )        
+            ) 
         
-
-
+          
     def Canvas2D_Button_Released(self, event):
         self.xend, self.yend = list(
             map(
@@ -571,20 +571,36 @@ class setupFrame:
     #         return False
     
     def calcTime(self):
-        strlist = ["width", "height", "w_step", "h_step", "dwell"]
-        try:
-            value = [float(self.scanParms[s].get()) for s in strlist]
-        except:
-            value = [0] * len(strlist)
-    
-        if value[0] > 80:
-            self.calctime.set("Width can not be bigger than 80")
-            self.calctime_out.config(fg="red")
-        elif 0 not in value:
-            eta_ms = value[-1] * value[0] * value[1] / value[2] / value[3]
-            eta_min = eta_ms / 1e3 / 60 / 0.8
-            self.calctime.set("%.3f" % (eta_min))
-            self.calctime_out.config(fg="green")
+        scant = self.scanType.get()
+        if scant == "XANES (fixed region)":
+            strlist = self.inputs_labels[2]
+            try:
+                value = [float(self.scanParms[s].get()) for s in strlist]            
+            except:
+                value = [0] * len(strlist)
+            if 0 in value:
+                self.calctime.set("wrong parameters")
+                self.calctime_out.config(fg="red")
+            else:
+                eta_ms = value[3] * value[2] / value[1]
+                eta_min = eta_ms / 60 / 0.8
+                self.calctime.set("%.3f" % (eta_min))
+                self.calctime_out.config(fg="green")
+        else:    
+            strlist = ["width", "height", "w_step", "h_step", "dwell"]
+            try:
+                value = [float(self.scanParms[s].get()) for s in strlist]
+            except:
+                value = [0] * len(strlist)
+        
+            if value[0] > 80:
+                self.calctime.set("Width can not be bigger than 80")
+                self.calctime_out.config(fg="red")
+            elif 0 not in value:
+                eta_ms = value[-1] * value[0] * value[1] / value[2] / value[3]
+                eta_min = eta_ms / 1e3 / 60 / 0.8
+                self.calctime.set("%.3f" % (eta_min))
+                self.calctime_out.config(fg="green")
     #-------------------cal tomo time---------------------------
     def cal_tomo_time(self):
         strlist_tomo = ["width", "height", "w_step", "h_step", "dwell", #0,1,2,3,4
@@ -930,8 +946,10 @@ class setupFrame:
 
         self.scanType = tk.StringVar(self.setupfrm)
         self.scanType.set("XRF")
-        scantype = ["XRF",'Coarse-Fine (Fixed Angle)', "Angle Sweep", "Coarse-Fine"]
-        padx = [(18, 10), (0, 10), (18, 10), (0, 10)]
+        #scantype = ["XRF",'Coarse-Fine (Fixed Angle)', "Angle Sweep", "Coarse-Fine"]
+        #--------------------------add XANES-----------------------------------------
+        scantype = ["XRF",'Coarse-Fine (Fixed Angle)', "Angle Sweep", "Coarse-Fine","XANES (fixed region)"]
+        padx = [(18, 10), (0, 10), (0,10), (18, 10), (0, 10)]
         self.row += 1
         for i, s in enumerate(scantype):
             #----------------------------when click Coarse-Fine, to create a folder to save fine scan image----------
@@ -944,8 +962,8 @@ class setupFrame:
                     master=self.setupfrm, text=s, 
                     variable=self.scanType, value=s,command=self.CF_folder)                
             #------------------------------------------------------------------------------------------------------------          
-            a.grid(row=self.row if i < 2 else (self.row+1), 
-                   column=self.col + i%2, padx=padx[i], 
+            a.grid(row=self.row if i < 3 else (self.row+1), 
+                   column=self.col + i%3, padx=padx[i], 
                    stick='w')
         
         # add ptycho checkboc
@@ -1043,7 +1061,13 @@ class setupFrame:
                 "log_his",
                 "flag",   #flag is just for test/real scan change: 0 is real, 1 is test
             ],
-        ]  #inputs_labels[0]: scan settings on top, inputs_labels[1]: scan settings for coarse-fine
+            [
+                "Energy (keV)",
+                "Energy step (keV)",
+                "Energy width (keV)",
+                "Dwell (s)",
+            ]
+        ]  #inputs_labels[0]: scan settings on top, inputs_labels[1]: scan settings for coarse-fine, inputs_labels[2]: scan settings for XANES
         #        corr = self.pvComm.getXYZcenter()
         temp_input = [0] * 6 + [20, 20, 1, 15, 10, 1]
         vcmd = self.setupfrm.register(checkEntryDigit)
@@ -1108,7 +1132,7 @@ class setupFrame:
         self.calctime = tk.StringVar()
         self.calctime.set("0")
         self.calctime_out = tk.Label(
-            self.setupfrm, width=10, textvariable=self.calctime
+            self.setupfrm, width=18, textvariable=self.calctime
         )
         self.calctime_out.grid(row=self.row, column=self.col + 1, sticky="w")
 
@@ -1175,39 +1199,93 @@ class setupFrame:
         tot_est_val = tk.Label(self.setupfrm, textvariable=self.tot_time)
         tot_est_val.grid(row=row, column=self.col + 1, sticky="w")
 
+        #------------------------add scan box for xanes----------------------------------------------
+        self.energy_step = 0.5
+        self.energy_width = 100
+        self.dwell_xanes = 20    #pre-defined value
+        self.c_eng = 10
         
+        self.xanes_frame = tk.Frame(self.setupfrm, borderwidth=1, relief="solid")
+        self.xanes_frame.grid(row=row+3, column=self.col, columnspan=12, pady=2, padx=2, sticky="w")  #a sperate frame for xanes collection
+
+        #xanes_paras = ['Energy (keV):','Energy step (eV):', 'Energy width (eV):', 'Dwell (ms):']
+        xanes_paras_val = [self.c_eng, self.energy_step, self.energy_width, self.dwell_xanes]
+        
+        xanes_title = tk.Label(self.xanes_frame, text='XANES set up:')
+        xanes_title.grid(row=row+3, column=self.col, sticky='w',pady=1,padx=2)  
+        for xi, xp in enumerate(self.inputs_labels[2]):
+            label = tk.Label(self.xanes_frame, text=xp)
+            entry_var = tk.StringVar(value=f'{xanes_paras_val[xi]}')
+            entry_var.trace("w", lambda name, index, mode, entry_var=entry_var: self.calcTime())
+            entry = tk.Entry(self.xanes_frame, width=8,textvariable=entry_var)    
+            label.grid(row=row+3, column=self.col+(xi%4)*2+1, sticky='w',pady=2)                               
+            entry.grid(row=row+3, column=self.col+(xi%4)*2+2, sticky='w', padx=2, pady=2)
+            self.scanParms.update({xp: entry})     # add values to scanParms  
         #-------------------------add a button to export fine images-----------------------------------
         
         self.export_frame = tk.Frame(self.setupfrm, borderwidth=1, relief="solid")
-        self.export_frame.grid(row=row+3, column=self.col, columnspan=10, pady=1, padx=1, sticky="w")
+        self.export_frame.grid(row=51, column=self.col, columnspan=10, pady=1, padx=1, sticky="w")
         
         self.enter_value = tk.StringVar()
         self.enter_value_elm = tk.StringVar()
         scan_export_text = tk.Label(self.export_frame, text='scan to export:',width=14)
-        scan_export_text.grid(row=row+3,column=10, padx=1,sticky='w')
+        scan_export_text.grid(row=51,column=10, padx=1,sticky='w')
         scan_range = tk.Entry(
                     self.export_frame,
                     width=10,
                     textvariable=self.enter_value)
-        scan_range.grid(row=row+3,column=self.col+1, padx=1,sticky='w')
+        scan_range.grid(row=51,column=self.col+1, padx=1,sticky='w')
         scan_elm_text = tk.Label(self.export_frame, text='element:')
-        scan_elm_text.grid(row=row+3,column=self.col+2, padx=1)
+        scan_elm_text.grid(row=51,column=self.col+2, padx=1)
         scan_elm = tk.Entry(
                     self.export_frame,
                     width=3,
                     textvariable=self.enter_value_elm)
-        scan_elm.grid(row=row+3,column=self.col+3, padx=1)# a entry for enter the scan start and end
+        scan_elm.grid(row=51,column=self.col+3, padx=1)# a entry for enter the scan start and end
         
         export_button = tk.Button(self.export_frame, text='export', command=self.export_scan_images)
-        export_button.grid(row=row+3,column=self.col+4, padx=1)
+        export_button.grid(row=51,column=self.col+4, padx=1)
         #self.export_prog_txt = tk.StringVar()
         self.export_prog_txt = "Done:"
         self.export_prog = tk.Label(self.export_frame, text=self.export_prog_txt)
-        self.export_prog.grid(row=row+4, column=10,columnspan=10,padx=1,sticky='w')  #a text 
+        self.export_prog.grid(row=52, column=10,columnspan=10,padx=1,sticky='w')  #a text 
         note = tk.Label(self.export_frame, text='Batch export: [start,end,step] = [1,10] or [1,10,2]; 1 or >2 scans')
         note.config(fg='green')
-        note.grid(row=row+5, column=10,columnspan=10,padx=1,sticky='w')  #a text 
+        note.grid(row=53, column=10,columnspan=10,padx=1,sticky='w')  #a text 
 
         #------------------------try to get user folder when open GUI-----------------------------------
         #self.getUserDir()
         #self.choose_folder()
+        
+ 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
