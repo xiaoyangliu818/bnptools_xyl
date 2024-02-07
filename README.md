@@ -5,4 +5,4 @@ bnp_gui is used in bionanoprobe beamline for data collection, originally develop
 2) I added user folder selection option instead of manually typing and creating user folders (flyXRF, mda etc.).
 3) I added XANES data collection workflow
 4) I added function to show ptychography image in the GUI, so users can select regions in ptychography image
-5) Add small but convinient functions for users and revise the GUI interface
+5) Add small but convinient functions such as export images, records xy coordinates, etc. for users and revise the GUI interface
